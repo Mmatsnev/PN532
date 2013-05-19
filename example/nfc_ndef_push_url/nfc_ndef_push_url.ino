@@ -1,3 +1,10 @@
+/**
+ * This example demonstrates pushing a NDEF from Arduino + NFC Shield to Android 4.0+
+ *
+ * Note: to enable NFC Shield wake up Arduino, D2/INT0 need to be connected with IRQ.
+ */
+
+
 #include <PN532.h>
 #include <NFCLinkLayer.h>
 #include <SNEP.h>
@@ -15,12 +22,13 @@ PN532 nfc(SCK, MISO, MOSI, SS);
 NFCLinkLayer linkLayer(&nfc);
 SNEP snep(&linkLayer);
 
-// This message shall be used to rx or tx 
-// NDEF messages it shall never be released
+
+// NDEF messages
 #define MAX_PKT_HEADER_SIZE  50
 #define MAX_PKT_PAYLOAD_SIZE 100
-uint8_t rxNDEFMessage[MAX_PKT_HEADER_SIZE + MAX_PKT_PAYLOAD_SIZE];
-uint8_t *rxNDEFMessagePtr; 
+uint8_t txNDEFMessage[MAX_PKT_HEADER_SIZE + MAX_PKT_PAYLOAD_SIZE];
+uint8_t *txNDEFMessagePtr; 
+uint8_t txLen;
 
 
 void phoneInRange()
@@ -30,7 +38,20 @@ void phoneInRange()
 
 void setup(void) {
     Serial.begin(115200);
-    Serial.println(F("----------------- NFC pull NDEF message --------------------"));
+    Serial.println(F("----------------- nfc ndef push url --------------------"));
+
+
+    txNDEFMessagePtr = &txNDEFMessage[MAX_PKT_HEADER_SIZE];
+    NdefMessage message = NdefMessage();
+    message.addUriRecord("http://seeedstudio.com");
+    txLen = message.getEncodedSize();
+    if (txLen <= MAX_PKT_PAYLOAD_SIZE) {
+      message.encode(txNDEFMessagePtr);
+    } else {
+      Serial.println("Tx Buffer is too small.");
+      while (1) {
+      }
+    }
     
     
     nfc.initializeReader();
@@ -49,10 +70,9 @@ void setup(void) {
     // set power sleep mode
     set_sleep_mode(SLEEP_MODE_ADC);
 
-    // configure board to read RFID tags and cards
     nfc.SAMConfig();
-
-    // interrupt to wake up MCU
+    
+    // interrupt to wake MCU
     attachInterrupt(0, phoneInRange, FALLING);
 }
 
@@ -64,8 +84,8 @@ void loop(void)
    Serial.println(F("---------------- LOOP ----------------------"));
    Serial.println();
 
-    uint32_t rxResult = GEN_ERROR; 
-    rxNDEFMessagePtr = &rxNDEFMessage[0];
+
+    uint32_t txResult = GEN_ERROR;
     
      if (IS_ERROR(nfc.configurePeerAsTarget(SNEP_SERVER))) {
         sleepMCU();
@@ -75,33 +95,19 @@ void loop(void)
      }
     
     do {
-        rxResult = snep.rxNDEFPayload(rxNDEFMessagePtr);
-        
-        if (rxResult == SEND_COMMAND_RX_TIMEOUT_ERROR)
-        {
-          Serial.println("rxNDEFPayload() timeout");
-           break;
-        } else if (IS_ERROR(rxResult)) {
-          Serial.println("rxNDEFPlayload() failed");
-          break;
-        }
+  
+        txResult = snep.pushPayload(txNDEFMessagePtr, txLen);
    
-    
-        if (RESULT_OK(rxResult))
-        {
-           NdefMessage *message = new NdefMessage(rxNDEFMessagePtr, rxResult);
-           Serial.print("NDEF record: ");
-           Serial.println(message->getRecordCount());
-           NdefRecord record = message->getRecord(0);
-           record.print();
-           
-           delay(3000);  
-        }
+
+        Serial.print(F("Result: 0x"));
+
+        Serial.println(txResult, HEX);     
+     
+        delay(3000);   
      } while(0);
      
      
 }
-
 
 void sleepMCU()
 {
@@ -117,9 +123,6 @@ void sleepMCU()
     power_timer2_disable();
     power_twi_disable();
     
-    //Serial.println("Going to Sleep\n");
-    //delay(1000);
-    
     // Puts the device to sleep.
     sleep_mode();  
     Serial.println("Woke up");          
@@ -129,6 +132,7 @@ void sleepMCU()
 
     // Disable sleep mode
     sleep_disable();         
+    
     
     power_all_enable();
 }   

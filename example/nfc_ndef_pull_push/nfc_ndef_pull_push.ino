@@ -1,6 +1,6 @@
 #include <PN532.h>
 #include <NFCLinkLayer.h>
-#include <NDEFPushProtocol.h>
+#include <SNEP.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
 
@@ -13,7 +13,7 @@
 
 PN532 nfc(SCK, MISO, MOSI, SS);
 NFCLinkLayer linkLayer(&nfc);
-NDEFPushProtocol nppLayer(&linkLayer);
+SNEP snep(&linkLayer);
 
 uint32_t createNDEFShortRecord(uint8_t *message, uint8_t payloadLen, uint8_t *&NDEFMessage);
 
@@ -41,10 +41,10 @@ void setup(void) {
     Serial.println("----------------- nfc ndef demo --------------------");
 
 
-    uint8_t message[64] = "Hello, this is NFC Shield from Seeed";
+    uint8_t message[] = "Hello, this is NFC Shield from Seeed";
     txNDEFMessagePtr = &txNDEFMessage[MAX_PKT_HEADER_SIZE];
     rxNDEFMessagePtr = &rxNDEFMessage[0];
-    txLen = createNDEFShortRecord(message, 5, txNDEFMessagePtr);    
+    txLen = createNDEFShortRecord(message, sizeof(message), txNDEFMessagePtr);    
     
     if (!txLen)
     { 
@@ -88,16 +88,16 @@ void loop(void)
     rxNDEFMessagePtr = &rxNDEFMessage[0];
     
     
-     if (IS_ERROR(nfc.configurePeerAsTarget(NPP_SERVER))) {
+     if (IS_ERROR(nfc.configurePeerAsTarget(SNEP_SERVER))) {
         sleepMCU();
-//        nfc.configurePeerAsTarget(NPP_SERVER);
+//        nfc.configurePeerAsTarget(SNEP_SERVER);
         PN532_CMD_RESPONSE *response = (PN532_CMD_RESPONSE *)buf;
         nfc.readspicommand(PN532_TGINITASTARGET, response);
      }
     
     do {
         //Serial.println("Begin Rx Loop");
-        rxResult = nppLayer.rxNDEFPayload(rxNDEFMessagePtr);
+        rxResult = snep.rxNDEFPayload(rxNDEFMessagePtr);
         
         if (rxResult == SEND_COMMAND_RX_TIMEOUT_ERROR)
         {
@@ -119,7 +119,7 @@ void loop(void)
            record.print();
         }
      
-        txResult = nppLayer.pushPayload(txNDEFMessagePtr, txLen);  
+        txResult = snep.pushPayload(txNDEFMessagePtr, txLen);  
       
         delay(3000);   
      } while(0);
